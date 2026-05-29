@@ -1,0 +1,280 @@
+import React, { useState, useEffect } from 'react';
+import SummaryApi from '../apis';
+import { useNavigate } from 'react-router-dom';
+import { roleOptions, departmentOptions } from '../role_details';
+import logo from '../assets/logo_gainwell_main.png';
+import { project_name } from '../config/project';
+import '../styles/portal.css';
+
+const COMPANY_EMAIL_DOMAIN = '@gainwellengineering.com';
+
+const Signup = () => {
+  const [formData, setFormData] = useState({
+    name: '', email: '', employeeId: '', password: '',
+    confirmPassword: '', managerEmpId: '', role: '', department: '',
+  });
+  const [errors,          setErrors]          = useState({});
+  const [loading,         setLoading]         = useState(false);
+  const [managers,        setManagers]        = useState([]);
+  const [loadingManagers, setLoadingManagers] = useState(false);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (formData.role === 'Employee') fetchManagersByRole();
+    else setManagers([]);
+  }, [formData.role]);
+
+  const fetchManagersByRole = async () => {
+    try {
+      setLoadingManagers(true);
+      const response = await fetch(`${SummaryApi.getUsersByRole.url}/${encodeURIComponent('Manager(COE)')}`);
+      const data     = await response.json();
+      setManagers(data.success && data.data?.length > 0 ? data.data : []);
+    } catch { setManagers([]); }
+    finally { setLoadingManagers(false); }
+  };
+
+  const hasManagerDropdown = formData.role === 'Employee';
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value, ...(name === 'role' ? { managerEmpId: '' } : {}) }));
+    if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }));
+  };
+
+  const validateForm = () => {
+    const e = {};
+    if (!formData.name.trim()) e.name = 'Name is required';
+
+    // Email validation — must be company email
+    if (!formData.email.trim()) {
+      e.email = 'Email is required';
+    } else if (!formData.email.toLowerCase().endsWith(COMPANY_EMAIL_DOMAIN)) {
+      e.email = `Only ${COMPANY_EMAIL_DOMAIN} email addresses are allowed`;
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      e.email = 'Please enter a valid email address';
+    }
+
+    if (!formData.employeeId.trim()) {
+      e.employeeId = 'Employee ID is required';
+    } else if (!/^GEPL/i.test(formData.employeeId.trim())) {
+      e.employeeId = 'Employee ID must start with GEPL (e.g. GEPL0001)';
+    }
+    if (!formData.role)              e.role       = 'Please select a role';
+    if (!formData.department)        e.department = 'Please select a department';
+
+    if (hasManagerDropdown && managers.length > 0 && !formData.managerEmpId)
+      e.managerEmpId = 'Please select your manager';
+
+    if (formData.role === 'Employee' && formData.managerEmpId) {
+      const sel = managers.find(m => m.employeeId === formData.managerEmpId);
+      if (sel?.department && sel.department !== formData.department)
+        e.department = 'Your department does not match your manager. Please recheck.';
+    }
+
+    if (!formData.password) {
+      e.password = 'Password is required';
+    } else if (formData.password.length < 8) {
+      e.password = 'Password must be at least 8 characters';
+    } else if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(formData.password)) {
+      e.password = 'Password must contain uppercase, lowercase, and numbers';
+    }
+
+    if (!formData.confirmPassword) {
+      e.confirmPassword = 'Please confirm your password';
+    } else if (formData.password !== formData.confirmPassword) {
+      e.confirmPassword = 'Passwords do not match';
+    }
+
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  };
+
+  const handleSubmit = async (ev) => {
+    ev.preventDefault();
+    if (!validateForm()) return;
+    if (hasManagerDropdown && managers.length === 0) {
+      setErrors({ managerEmpId: 'Please ask your respective manager to register first.' });
+      return;
+    }
+    setLoading(true);
+    try {
+      const response = await fetch(SummaryApi.signUp.url, {
+        method: SummaryApi.signUp.method,
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          name: formData.name, email: formData.email, employeeId: formData.employeeId,
+          password: formData.password, managerEmployeeId: formData.managerEmpId || null,
+          role: formData.role, department: formData.department,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Signup failed');
+      alert('Signup successful! Please login to continue.');
+      navigate('/login');
+    } catch (error) {
+      setErrors({ apiError: error.message });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const errStyle    = (field) => errors[field] ? { borderColor: '#f87171', background: '#fff5f5' } : {};
+  const selectStyle = (field) => ({
+    width: '100%', borderRadius: '8px', padding: '10px 13px',
+    fontSize: '13.5px', outline: 'none', color: '#111827', boxSizing: 'border-box',
+    border: `1px solid ${errors[field] ? '#f87171' : '#d1d5db'}`,
+    background: errors[field] ? '#fff5f5' : '#fff', appearance: 'auto',
+  });
+
+  return (
+    <div className="min-h-screen relative overflow-hidden"
+      style={{ background: 'linear-gradient(160deg, #243252 0%, #1e2947 45%, #1b2644 100%)' }}>
+      <div className="absolute inset-0" style={{ background: 'radial-gradient(ellipse at 30% 55%, rgba(198,40,40,0.09) 0%, transparent 55%)', pointerEvents: 'none' }} />
+      <div className="absolute inset-0" style={{ background: 'radial-gradient(ellipse at 75% 30%, rgba(91,155,213,0.07) 0%, transparent 50%)', pointerEvents: 'none' }} />
+
+      <div className="relative z-10 min-h-screen flex flex-col px-6 py-8 lg:px-28 lg:py-10">
+        <img src={logo} alt={project_name} className="object-left flex-shrink-0" style={{ height: '72px', width: 'auto', objectFit: 'contain' }} />
+
+        <div className="flex-1 flex flex-col lg:flex-row items-center justify-center gap-8 lg:gap-20 mt-6 pb-6">
+
+          {/* Left branding */}
+          <div className="hidden lg:flex flex-col" style={{ color: '#ffffff', width: '48%', flexShrink: 0 }}>
+            <h1 style={{ fontSize: '72px', fontWeight: 900, lineHeight: 1.05, letterSpacing: '-1px', margin: 0 }}>
+              ONE<br />ENGINEERING
+            </h1>
+            <p style={{ fontSize: '14.5px', lineHeight: 1.65, color: 'rgba(193,221,255,0.85)', marginTop: '22px', maxWidth: '400px' }}>
+              Register for secure access to engineering applications, workflow systems, analytics platforms and enterprise collaboration tools.
+            </p>
+            <ul style={{ marginTop: '20px', listStyle: 'none', padding: 0, display: 'flex', flexDirection: 'column', gap: '13px' }}>
+              {['NEXUS workflow platform', 'DesignWorks collaboration suite', 'Role-based engineering access', 'Department analytics & reporting', 'Cross-functional approval systems', 'Operational workflow management'].map(item => (
+                <li key={item} className="auth-feature-item" style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: 'rgba(183,213,255,0.82)' }}>
+                  <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#5b9bd5', flexShrink: 0 }} />
+                  {item}
+                </li>
+              ))}
+            </ul>
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '28px' }}>
+              {['Employee', 'Manager(COE)', 'Admin'].map(r => (
+                <span key={r} className="auth-chip" style={{ borderColor: 'rgba(91,155,213,0.35)', color: 'rgba(193,221,255,0.85)' }}>{r}</span>
+              ))}
+            </div>
+          </div>
+
+          {/* Right card */}
+          <div className="w-full lg:flex-shrink-0 auth-card" style={{ padding: '36px 40px', maxWidth: '420px' }}>
+            <div style={{ textAlign: 'center', marginBottom: '16px' }}>
+              <span className="auth-badge" style={{ background: 'rgba(198,40,40,0.10)', border: '1px solid rgba(198,40,40,0.22)', color: '#e57373' }}>
+                CREATE ACCOUNT
+              </span>
+            </div>
+            <h2 className="auth-title">Create Account</h2>
+            <p className="auth-subtitle" style={{ marginTop: '4px' }}>Register for {project_name}</p>
+
+            {errors.apiError && (
+              <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', color: '#dc2626', padding: '10px 13px', borderRadius: '8px', fontSize: '12.5px', marginTop: '14px' }}>
+                {errors.apiError}
+              </div>
+            )}
+
+            <form onSubmit={handleSubmit} style={{ marginTop: '22px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '13.5px', fontWeight: 600, color: '#1f2937', marginBottom: '6px' }}>Full Name</label>
+                <input name="name" value={formData.name} onChange={handleChange} placeholder="Your full name" className="auth-input" style={errStyle('name')} />
+                {errors.name && <p style={{ color: '#ef4444', fontSize: '11.5px', marginTop: '3px' }}>{errors.name}</p>}
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '13.5px', fontWeight: 600, color: '#1f2937', marginBottom: '6px' }}>
+                  Email
+                  <span style={{ fontSize: '11px', color: '#6b7280', fontWeight: 400, marginLeft: '6px' }}>
+                    (must be @gainwellengineering.com)
+                  </span>
+                </label>
+                <input name="email" value={formData.email} onChange={handleChange}
+                  placeholder="you@gainwellengineering.com" className="auth-input" style={errStyle('email')} />
+                {errors.email && <p style={{ color: '#ef4444', fontSize: '11.5px', marginTop: '3px' }}>{errors.email}</p>}
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '13.5px', fontWeight: 600, color: '#1f2937', marginBottom: '6px' }}>
+                  Employee ID
+                  <span style={{ fontSize: '11px', color: '#6b7280', fontWeight: 400, marginLeft: '6px' }}>(must start with GEPL)</span>
+                </label>
+                <input name="employeeId" value={formData.employeeId} onChange={handleChange} placeholder="e.g. GEPL0001" className="auth-input" style={errStyle('employeeId')} />
+                {errors.employeeId && <p style={{ color: '#ef4444', fontSize: '11.5px', marginTop: '3px' }}>{errors.employeeId}</p>}
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13.5px', fontWeight: 600, color: '#1f2937', marginBottom: '6px' }}>Role</label>
+                  <select name="role" value={formData.role} onChange={handleChange} style={selectStyle('role')}>
+                    <option value="">— Select Role —</option>
+                    {roleOptions.map(r => <option key={r} value={r}>{r}</option>)}
+                  </select>
+                  {errors.role && <p style={{ color: '#ef4444', fontSize: '11.5px', marginTop: '3px' }}>{errors.role}</p>}
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13.5px', fontWeight: 600, color: '#1f2937', marginBottom: '6px' }}>Department</label>
+                  <select name="department" value={formData.department} onChange={handleChange} style={selectStyle('department')}>
+                    <option value="">— Select Dept —</option>
+                    {departmentOptions.map(d => <option key={d} value={d}>{d}</option>)}
+                  </select>
+                  {errors.department && <p style={{ color: '#ef4444', fontSize: '11.5px', marginTop: '3px' }}>{errors.department}</p>}
+                </div>
+              </div>
+
+              {hasManagerDropdown && (
+                <div>
+                  <label style={{ display: 'block', fontSize: '13.5px', fontWeight: 600, color: '#1f2937', marginBottom: '6px' }}>Manager</label>
+                  {loadingManagers ? (
+                    <p style={{ fontSize: '12.5px', color: '#9ca3af', padding: '8px 0' }}>Loading managers…</p>
+                  ) : managers.length === 0 ? (
+                    <p style={{ fontSize: '12.5px', color: '#d97706', padding: '6px 0' }}>
+                      No managers registered yet. Ask your manager to register first.
+                    </p>
+                  ) : (
+                    <select name="managerEmpId" value={formData.managerEmpId} onChange={handleChange} style={selectStyle('managerEmpId')}>
+                      <option value="">Select Manager</option>
+                      {managers.map(m => <option key={m.employeeId} value={m.employeeId}>{m.name} ({m.employeeId})</option>)}
+                    </select>
+                  )}
+                  {errors.managerEmpId && <p style={{ color: '#ef4444', fontSize: '11.5px', marginTop: '3px' }}>{errors.managerEmpId}</p>}
+                </div>
+              )}
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13.5px', fontWeight: 600, color: '#1f2937', marginBottom: '6px' }}>Password</label>
+                  <input type="password" name="password" value={formData.password} onChange={handleChange}
+                    placeholder="Min 8 chars" className="auth-input" style={errStyle('password')} />
+                  {errors.password && <p style={{ color: '#ef4444', fontSize: '11.5px', marginTop: '3px' }}>{errors.password}</p>}
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13.5px', fontWeight: 600, color: '#1f2937', marginBottom: '6px' }}>Confirm</label>
+                  <input type="password" name="confirmPassword" value={formData.confirmPassword} onChange={handleChange}
+                    placeholder="Repeat password" className="auth-input" style={errStyle('confirmPassword')} />
+                  {errors.confirmPassword && <p style={{ color: '#ef4444', fontSize: '11.5px', marginTop: '3px' }}>{errors.confirmPassword}</p>}
+                </div>
+              </div>
+
+              <button type="submit" disabled={loading} className="auth-button" style={{ marginTop: '4px' }}>
+                {loading ? 'Creating account…' : 'Create Account →'}
+              </button>
+            </form>
+
+            <p style={{ textAlign: 'center', fontSize: '13px', color: '#9ca3af', marginTop: '18px' }}>
+              Already have an account?{' '}
+              <a href="/login" className="auth-link" style={{ color: '#4a7fc1' }}>Sign in</a>
+            </p>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default Signup;

@@ -1,0 +1,589 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import { useParams } from 'react-router-dom';
+import {
+  BsPeopleFill, BsArrowClockwise, BsChevronDown, BsChevronUp,
+  BsFolderFill, BsPencilSquare, BsSearch, BsBoxArrowUpRight,
+} from 'react-icons/bs';
+import SummaryApi from '../apis/index.jsx';
+
+// ── Palettes ──────────────────────────────────────────────────────────────────
+
+const EMP_PALETTES = [
+  { accent: '#4b5563', light: '#f9fafb', border: '#e5e7eb', badge: '#f3f4f6', bar: '#6b7280', headerBg: '#f3f4f6', headerText: '#1f2937', headerSub: '#6b7280', statBg: 'rgba(75,85,99,0.08)', statText: '#374151' },
+  { accent: '#6b7280', light: '#f9fafb', border: '#e5e7eb', badge: '#f3f4f6', bar: '#9ca3af', headerBg: '#f1f5f9', headerText: '#1f2937', headerSub: '#6b7280', statBg: 'rgba(100,116,139,0.08)', statText: '#374151' },
+  { accent: '#4b5563', light: '#f9fafb', border: '#e5e7eb', badge: '#f3f4f6', bar: '#6b7280', headerBg: '#f3f4f6', headerText: '#1f2937', headerSub: '#6b7280', statBg: 'rgba(75,85,99,0.08)', statText: '#374151' },
+  { accent: '#6b7280', light: '#f9fafb', border: '#e5e7eb', badge: '#f3f4f6', bar: '#9ca3af', headerBg: '#f1f5f9', headerText: '#1f2937', headerSub: '#6b7280', statBg: 'rgba(100,116,139,0.08)', statText: '#374151' },
+];
+
+const TYPE_CFG = {
+  actual:   { label: 'Actual',   color: '#374151', bg: '#f3f4f6', cellBg: '#1f2937', cellText: '#ffffff' },
+  leave:    { label: 'Leave',    color: '#4b5563', bg: '#f3f4f6', cellBg: '#4b5563', cellText: '#ffffff' },
+  training: { label: 'Training', color: '#6b7280', bg: '#f3f4f6', cellBg: '#9ca3af', cellText: '#374151' },
+};
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+const statusBadge = (logStatus) => {
+  const map = {
+    submitted:      { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0', label: 'Submitted'  },
+    'not submitted':{ bg: '#fffbeb', color: '#d97706', border: '#fde68a', label: 'Pending'    },
+    draft:          { bg: '#f3f4f6', color: '#6b7280', border: '#e5e7eb', label: 'Draft'      },
+  };
+  const s = map[logStatus] || map['not submitted'];
+  return (
+    <span style={{ background: s.bg, color: s.color, border: `1px solid ${s.border}`, padding: '2px 9px', borderRadius: '10px', fontSize: '11.5px', fontWeight: 700 }}>
+      {s.label}
+    </span>
+  );
+};
+
+// ── Edit Modal ────────────────────────────────────────────────────────────────
+
+const EditModal = ({ modal, editVal, setEditVal, editJustify, setEditJustify, saving, saveError, onSave, onClose }) => {
+  const cfg = TYPE_CFG[modal.type];
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ background: '#ffffff', borderRadius: '14px', padding: '28px 32px', width: '390px', boxShadow: '0 24px 72px rgba(0,0,0,0.35)', border: '2px solid #e5e7eb' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+          <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: cfg.cellBg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <BsPencilSquare size={15} color={cfg.cellText} />
+          </div>
+          <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#111827' }}>Edit {cfg.label} Hours</h3>
+        </div>
+        <p style={{ margin: '0 0 20px', fontSize: '13px', color: '#6b7280' }}>
+          <strong style={{ color: '#111827' }}>{modal.empName}</strong> · Week {modal.weekNumber} ({modal.year})
+        </p>
+
+        <div style={{ marginBottom: '14px' }}>
+          <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#374151', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+            {cfg.label} Hours
+          </label>
+          <input
+            type="number" min="0" step="0.5"
+            value={editVal}
+            onChange={(e) => setEditVal(e.target.value)}
+            autoFocus
+            style={{ width: '100%', padding: '11px 13px', borderRadius: '8px', border: `2px solid ${cfg.cellBg}`, outline: 'none', fontSize: '16px', fontWeight: 800, color: cfg.cellBg, boxSizing: 'border-box', background: '#f9fafb' }}
+          />
+        </div>
+
+        <div style={{ marginBottom: '18px' }}>
+          <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#374151', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+            Justification <span style={{ color: '#dc2626' }}>*</span>
+          </label>
+          <textarea
+            value={editJustify}
+            onChange={(e) => setEditJustify(e.target.value)}
+            placeholder="Reason for this update…"
+            rows={3}
+            style={{ width: '100%', padding: '10px 13px', borderRadius: '8px', border: '1.5px solid #d1d5db', outline: 'none', fontSize: '13px', resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit', color: '#374151' }}
+          />
+        </div>
+
+        {saveError && (
+          <p style={{ margin: '0 0 14px', fontSize: '13px', color: '#dc2626', background: '#fef2f2', padding: '8px 12px', borderRadius: '6px', border: '1px solid #fca5a5' }}>{saveError}</p>
+        )}
+
+        <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+          <button onClick={onClose} disabled={saving} style={{ padding: '9px 22px', borderRadius: '8px', border: '1.5px solid #d1d5db', background: '#f3f4f6', color: '#374151', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>
+            Cancel
+          </button>
+          <button onClick={onSave} disabled={saving} style={{ padding: '9px 22px', borderRadius: '8px', border: 'none', background: cfg.cellBg, color: cfg.cellText, fontSize: '13px', fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1 }}>
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ── Project Card ──────────────────────────────────────────────────────────────
+
+const ProjectCard = ({ project, plans, empId, empName, palette, onEditSave, panelKey, openPanelKey, onTogglePanel }) => {
+  const isOpen     = openPanelKey.has(panelKey);
+  const [editModal, setEditModal] = useState(null);
+  const [editVal,   setEditVal]   = useState('');
+  const [editJust,  setEditJust]  = useState('');
+  const [saving,    setSaving]    = useState(false);
+  const [saveErr,   setSaveErr]   = useState('');
+  const [localOvr,  setLocalOvr]  = useState({});
+
+  const sorted = [...plans].sort((a, b) => a.year !== b.year ? a.year - b.year : a.weekNumber - b.weekNumber);
+
+  const getVal = (type, plan) => {
+    const k = `${plan.year}-${plan.weekNumber}`;
+    if (localOvr[k]?.[type] !== undefined) return localOvr[k][type];
+    return type === 'actual' ? plan.workedHours : type === 'leave' ? plan.leaveHours : plan.trainingHours;
+  };
+
+  const totalPlanned   = plans.reduce((s, p) => s + (p.plannedHours || 0), 0);
+  const totalActual    = plans.reduce((s, p) => s + (getVal('actual', p) || 0), 0);
+  const submittedWeeks = plans.filter((p) => p.logStatus === 'submitted').length;
+  const pendingWeeks   = plans.length - submittedWeeks;
+
+  const openEdit = (plan, type) => {
+    const cur = getVal(type, plan);
+    setEditModal({ plan, type, empName, weekNumber: plan.weekNumber, year: plan.year });
+    setEditVal(String(cur ?? 0));
+    setEditJust('');
+    setSaveErr('');
+  };
+
+  const handleSave = async () => {
+    if (!editJust.trim()) { setSaveErr('Justification is required.'); return; }
+    const newVal = Math.max(0, Number(editVal) || 0);
+    const { plan, type } = editModal;
+    const k = `${plan.year}-${plan.weekNumber}`;
+    const curActual   = getVal('actual',   plan) ?? 0;
+    const curLeave    = getVal('leave',    plan) ?? 0;
+    const curTraining = getVal('training', plan) ?? 0;
+
+    setSaving(true); setSaveErr('');
+    try {
+      const res = await fetch(SummaryApi.managerUpdateWorkLog.url, {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId:      project._id,
+          employeeUserId: empId,
+          year:           plan.year,
+          weekNumber:     plan.weekNumber,
+          workedHours:    type === 'actual'   ? newVal : curActual,
+          leaveHours:     type === 'leave'    ? newVal : curLeave,
+          trainingHours:  type === 'training' ? newVal : curTraining,
+          justification:  editJust.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!data.success) { setSaveErr(data.message || 'Save failed'); setSaving(false); return; }
+
+      setLocalOvr((prev) => ({
+        ...prev,
+        [k]: {
+          actual:   type === 'actual'   ? newVal : curActual,
+          leave:    type === 'leave'    ? newVal : curLeave,
+          training: type === 'training' ? newVal : curTraining,
+        },
+      }));
+      setEditModal(null);
+      if (onEditSave) onEditSave();
+    } catch { setSaveErr('Network error'); }
+    finally { setSaving(false); }
+  };
+
+  const thStyle = { padding: '8px 12px', fontSize: '11px', fontWeight: 700, color: palette.accent, textTransform: 'uppercase', letterSpacing: '0.4px', borderBottom: `2px solid ${palette.border}`, background: palette.light, whiteSpace: 'nowrap', textAlign: 'left' };
+  const tdStyle = { padding: '9px 12px', fontSize: '13.5px', color: '#374151', borderBottom: `1px solid ${palette.border}`, verticalAlign: 'middle' };
+
+  const editableCell = (type, plan) => {
+    const val         = getVal(type, plan);
+    const cfg         = TYPE_CFG[type];
+    const isSubmitted = plan.logStatus === 'submitted';
+    // Show '—' only when truly no data: null, or 0 on an un-submitted record
+    const isEmpty     = val == null || (!isSubmitted && val === 0);
+    return (
+      <td
+        title="Click to edit"
+        onClick={() => openEdit(plan, type)}
+        style={{
+          ...tdStyle, cursor: 'pointer',
+          color: val > 0 ? cfg.color : isEmpty ? '#d1d5db' : '#6b7280',
+          fontWeight: val > 0 ? 700 : 400,
+          background: cfg.bg,
+          transition: 'filter 0.15s',
+        }}
+        onMouseEnter={(e) => { e.currentTarget.style.filter = 'brightness(0.92)'; }}
+        onMouseLeave={(e) => { e.currentTarget.style.filter = 'none'; }}
+      >
+        <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+          {isEmpty ? '—' : val}
+          <BsPencilSquare size={9} style={{ opacity: 0.45 }} />
+        </span>
+      </td>
+    );
+  };
+
+  return (
+    <>
+      {editModal && (
+        <EditModal
+          modal={editModal}
+          editVal={editVal}       setEditVal={setEditVal}
+          editJustify={editJust}  setEditJustify={setEditJust}
+          saving={saving}         saveError={saveErr}
+          onSave={handleSave}
+          onClose={() => setEditModal(null)}
+        />
+      )}
+
+      <div style={{ background: '#fff', border: `1.5px solid ${isOpen ? palette.accent : palette.border}`, borderRadius: '12px', overflow: 'hidden', marginBottom: '12px', transition: 'border-color 0.15s' }}>
+
+        {/* Card header — entire row clickable */}
+        <div
+          onClick={() => onTogglePanel(panelKey)}
+          style={{ padding: '14px 18px', background: isOpen ? palette.light : '#fff', cursor: 'pointer', transition: 'background 0.15s' }}
+          onMouseEnter={(e) => { if (!isOpen) e.currentTarget.style.background = palette.light; }}
+          onMouseLeave={(e) => { if (!isOpen) e.currentTarget.style.background = isOpen ? palette.light : '#fff'; }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <BsFolderFill size={14} color={palette.accent} />
+              <span style={{ background: palette.badge, color: palette.accent, padding: '2px 10px', borderRadius: '12px', fontSize: '12px', fontWeight: 800 }}>{project?.projectCode}</span>
+              <span style={{ fontSize: '14px', fontWeight: 700, color: '#0e1e3d', wordBreak: 'break-word' }}>{project?.projectName}</span>
+            </div>
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+              {[
+                { label: 'Planned (h)',  value: totalPlanned,   color: '#1d4ed8' },
+                { label: 'Actual (h)',   value: totalActual,    color: '#16a34a' },
+                { label: 'Weeks',        value: plans.length,   color: '#374151' },
+                { label: 'Submitted',    value: submittedWeeks, color: '#16a34a' },
+                { label: 'Pending',      value: pendingWeeks,   color: pendingWeeks > 0 ? '#d97706' : '#9ca3af' },
+              ].map((s) => (
+                <div key={s.label} style={{ textAlign: 'center', padding: '5px 10px', background: '#fff', borderRadius: '8px', border: `1px solid ${palette.border}`, minWidth: '70px' }}>
+                  <div style={{ fontSize: '10px', color: '#6b7280', fontWeight: 700, textTransform: 'uppercase' }}>{s.label}</div>
+                  <div style={{ fontSize: '16px', fontWeight: 800, color: s.color }}>{s.value}</div>
+                </div>
+              ))}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '6px 13px', borderRadius: '7px', border: `1.5px solid ${isOpen ? palette.accent : palette.border}`, background: isOpen ? palette.badge : '#fff', color: palette.accent, fontSize: '12px', fontWeight: 700 }}>
+                {isOpen ? <BsChevronUp size={11} /> : <BsChevronDown size={11} />}
+                {isOpen ? 'Hide' : 'View Weeks'}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Inline weekly table */}
+        {isOpen && (
+          <div style={{ overflowX: 'auto', borderTop: `1px solid ${palette.border}` }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '620px' }}>
+              <thead>
+                <tr>
+                  {['Year', 'Week No.', 'Wk Cap (h)', 'Planned (h)', 'Actual (h)', 'Leave (h)', 'Training (h)', 'Status'].map((h) => (
+                    <th key={h} style={thStyle}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {sorted.map((plan, i) => (
+                  <tr key={`${plan.year}-${plan.weekNumber}`} style={{ background: i % 2 === 0 ? '#fff' : palette.light }}>
+                    <td style={{ ...tdStyle, fontWeight: 600 }}>{plan.year}</td>
+                    <td style={tdStyle}>
+                      <span style={{ background: palette.badge, color: palette.accent, padding: '2px 9px', borderRadius: '10px', fontSize: '12px', fontWeight: 700 }}>
+                        Wk {plan.weekNumber}
+                      </span>
+                    </td>
+                    <td style={{ ...tdStyle, color: '#0284c7', fontWeight: 600 }}>{plan.totalWeeklyHours > 0 ? plan.totalWeeklyHours : '—'}</td>
+                    <td style={{ ...tdStyle, fontWeight: 700, color: '#7c3aed' }}>{plan.plannedHours || 0}</td>
+                    {editableCell('actual',   plan)}
+                    {editableCell('leave',    plan)}
+                    {editableCell('training', plan)}
+                    <td style={tdStyle}>{statusBadge(plan.logStatus)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </>
+  );
+};
+
+// ── Employee Section ──────────────────────────────────────────────────────────
+
+const EmployeeSection = ({ employee, projectGroups, palette, idx, managerEmpId, onEditSave, openPanelKey, onTogglePanel }) => {
+  const [open, setOpen] = useState(true);
+
+  const openTracking = (e) => {
+    e.stopPropagation();
+    if (!managerEmpId || !employee?.employeeId) return;
+    window.open(`/dashboard/manager/${managerEmpId}/track-employee/${employee.employeeId}`, '_blank', 'noopener');
+  };
+
+  const projectList = Object.values(projectGroups);
+  const totalPlanned = projectList.reduce((s, pg) => s + pg.plans.reduce((a, p) => a + (p.plannedHours || 0), 0), 0);
+  const totalWeeks   = projectList.reduce((s, pg) => s + pg.plans.length, 0);
+  const submitted    = projectList.reduce((s, pg) => s + pg.plans.filter((p) => p.logStatus === 'submitted').length, 0);
+  const pending      = totalWeeks - submitted;
+
+  return (
+    <div style={{ marginBottom: '24px' }}>
+      {/* Employee header */}
+      <div
+        style={{
+          background: palette.headerBg,
+          border: `1.5px solid ${palette.border}`,
+          borderRadius: '12px 12px 0 0', padding: '14px 20px',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          flexWrap: 'wrap', gap: '10px', cursor: 'pointer',
+        }}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: palette.statBg, border: `1.5px solid ${palette.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', fontWeight: 800, color: palette.headerText, flexShrink: 0 }}>
+            {(employee?.name || '?')[0].toUpperCase()}
+          </div>
+          <div>
+            <div
+              onClick={openTracking}
+              title="Open weekly tracking in a new tab"
+              style={{ fontSize: '15px', fontWeight: 800, color: '#1d4ed8', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '5px', wordBreak: 'break-word', overflowWrap: 'break-word' }}
+              onMouseEnter={(e) => { e.currentTarget.style.textDecoration = 'underline'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.textDecoration = 'none'; }}
+            >
+              {employee?.name || 'Unknown'}
+              <BsBoxArrowUpRight size={11} />
+            </div>
+            <div style={{ fontSize: '12px', color: palette.headerSub, fontWeight: 500 }}>
+              {employee?.employeeId} · {employee?.department}
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+          {[
+            { label: 'Projects',   value: projectList.length },
+            { label: 'Total Wks',  value: totalWeeks         },
+            { label: 'Planned (h)',value: totalPlanned        },
+            { label: 'Submitted',  value: submitted           },
+            { label: 'Pending',    value: pending             },
+          ].map((s) => (
+            <div key={s.label} style={{ textAlign: 'center', background: palette.statBg, borderRadius: '8px', padding: '4px 12px', minWidth: '60px' }}>
+              <div style={{ fontSize: '10px', color: palette.headerSub, fontWeight: 600, textTransform: 'uppercase' }}>{s.label}</div>
+              <div style={{ fontSize: '16px', fontWeight: 800, color: palette.headerText }}>{s.value}</div>
+            </div>
+          ))}
+          <div style={{ color: palette.headerText, opacity: 0.9 }}>{open ? <BsChevronUp size={16} /> : <BsChevronDown size={16} />}</div>
+        </div>
+      </div>
+
+      {/* Employee's projects */}
+      {open && (
+        <div style={{ border: `1.5px solid ${palette.border}`, borderTop: 'none', borderRadius: '0 0 12px 12px', padding: '16px 16px 4px' }}>
+          {projectList.map((pg) => (
+            <ProjectCard
+              key={pg.project?._id}
+              project={pg.project}
+              plans={pg.plans}
+              empId={String(employee?._id)}
+              empName={employee?.name || 'Unknown'}
+              palette={palette}
+              onEditSave={onEditSave}
+              panelKey={`${employee?._id}-${pg.project?._id}`}
+              openPanelKey={openPanelKey}
+              onTogglePanel={onTogglePanel}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ── Main Section ──────────────────────────────────────────────────────────────
+
+const WeeklyReviewSection = ({ refreshKey = 0 }) => {
+  const { employeeId: managerEmpId } = useParams();
+  const [plans,        setPlans]        = useState([]);
+  const [loading,      setLoading]      = useState(true);
+  const [error,        setError]        = useState('');
+  const [openPanelKey, setOpenPanelKey] = useState(new Set());
+
+  const handleTogglePanel = (key) => setOpenPanelKey((prev) => {
+    const next = new Set(prev);
+    next.has(key) ? next.delete(key) : next.add(key);
+    return next;
+  });
+  const [empSearch,   setEmpSearch]   = useState('');
+  const [projSearch,  setProjSearch]  = useState('');
+  const [weekSearch,  setWeekSearch]  = useState('');
+  const [yearSearch,  setYearSearch]  = useState('');
+  const [inputEmp,    setInputEmp]    = useState('');
+  const [inputProj,   setInputProj]   = useState('');
+  const [inputWeek,   setInputWeek]   = useState('');
+  const [inputYear,   setInputYear]   = useState('');
+
+  const fetchPlans = useCallback(async () => {
+    setLoading(true); setError('');
+    try {
+      const params = new URLSearchParams();
+      if (empSearch)  params.set('employeeName', empSearch);
+      if (projSearch) params.set('projectName',  projSearch);
+      if (weekSearch) params.set('weekNumber',   weekSearch);
+      if (yearSearch) params.set('year',         yearSearch);
+      const res  = await fetch(`${SummaryApi.getAllWeeklyPlans.url}?${params}`, { credentials: 'include' });
+      const data = await res.json();
+      if (data.success) setPlans(data.data);
+      else setError(data.message || 'Failed to load weekly data');
+    } catch { setError('Network error. Please try again.'); }
+    finally { setLoading(false); }
+  }, [empSearch, projSearch, weekSearch, yearSearch]);
+
+  useEffect(() => { fetchPlans(); }, [fetchPlans, refreshKey]);
+
+  const handleSearch = () => {
+    setEmpSearch(inputEmp.trim());
+    setProjSearch(inputProj.trim());
+    setWeekSearch(inputWeek.trim());
+    setYearSearch(inputYear.trim());
+  };
+  const handleClearSearch = () => {
+    setInputEmp(''); setInputProj(''); setInputWeek(''); setInputYear('');
+    setEmpSearch(''); setProjSearch(''); setWeekSearch(''); setYearSearch('');
+  };
+
+  // Group by employee → project
+  const empMap = {};
+  plans.forEach((plan) => {
+    const empId = String(plan.employee?._id || '');
+    if (!empId) return;
+    if (!empMap[empId]) empMap[empId] = { employee: plan.employee, projects: {} };
+    const projId = String(plan.project?._id || '');
+    if (!empMap[empId].projects[projId]) {
+      empMap[empId].projects[projId] = { project: plan.project, plans: [] };
+    }
+    empMap[empId].projects[projId].plans.push(plan);
+  });
+
+  const employees = Object.values(empMap).sort((a, b) =>
+    (a.employee?.name || '').localeCompare(b.employee?.name || '')
+  );
+
+
+  return (
+    <div style={{ fontFamily: 'Arial, sans-serif' }}>
+
+      {/* ── Section header ── */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '22px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{ width: '44px', height: '44px', borderRadius: '11px', background: 'linear-gradient(135deg,#4f46e5,#7c3aed)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(79,70,229,0.3)', flexShrink: 0 }}>
+            <BsPeopleFill size={20} color="#fff" />
+          </div>
+          <div>
+            <h3 style={{ margin: 0, fontSize: '20px', fontWeight: 700, color: '#0e1e3d' }}>Weekly Review</h3>
+            <p style={{ margin: '3px 0 0', fontSize: '14px', color: '#6b7280' }}>
+              All employees' weekly hours · click Actual / Leave / Training to edit
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={fetchPlans}
+          style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '9px 16px', borderRadius: '8px', border: '1.5px solid #e5e7eb', background: '#fff', color: '#374151', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}
+        >
+          <BsArrowClockwise size={14} /> Refresh
+        </button>
+      </div>
+
+      {/* ── Filters ── */}
+      <div style={{ background: 'linear-gradient(135deg,#f5f3ff,#ede9fe)', border: '1.5px solid #ddd6fe', borderRadius: '14px', padding: '16px 20px', marginBottom: '24px' }}>
+        <p style={{ margin: '0 0 10px', fontSize: '11px', fontWeight: 700, color: '#6d28d9', textTransform: 'uppercase', letterSpacing: '0.6px' }}>Filter</p>
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+          <div style={{ position: 'relative', flex: '1 1 180px', maxWidth: '240px' }}>
+            <BsSearch size={12} color="#9ca3af" style={{ position: 'absolute', left: '11px', top: '50%', transform: 'translateY(-50%)' }} />
+            <input
+              type="text"
+              placeholder="Employee name…"
+              value={inputEmp}
+              onChange={(e) => setInputEmp(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleSearch(); }}
+              style={{ width: '100%', padding: '9px 12px 9px 30px', borderRadius: '8px', border: '1.5px solid #ddd6fe', outline: 'none', fontSize: '13px', background: '#fff', boxSizing: 'border-box' }}
+            />
+          </div>
+          <div style={{ position: 'relative', flex: '1 1 180px', maxWidth: '240px' }}>
+            <BsSearch size={12} color="#9ca3af" style={{ position: 'absolute', left: '11px', top: '50%', transform: 'translateY(-50%)' }} />
+            <input
+              type="text"
+              placeholder="Project name or code…"
+              value={inputProj}
+              onChange={(e) => setInputProj(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleSearch(); }}
+              style={{ width: '100%', padding: '9px 12px 9px 30px', borderRadius: '8px', border: '1.5px solid #ddd6fe', outline: 'none', fontSize: '13px', background: '#fff', boxSizing: 'border-box' }}
+            />
+          </div>
+          <input
+            type="number"
+            placeholder="Week No."
+            min="1" max="53"
+            value={inputWeek}
+            onChange={(e) => setInputWeek(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleSearch(); }}
+            style={{ width: '100px', padding: '9px 12px', borderRadius: '8px', border: '1.5px solid #ddd6fe', outline: 'none', fontSize: '13px', background: '#fff', boxSizing: 'border-box' }}
+          />
+          <input
+            type="number"
+            placeholder="Year"
+            min="2020" max="2099"
+            value={inputYear}
+            onChange={(e) => setInputYear(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleSearch(); }}
+            style={{ width: '100px', padding: '9px 12px', borderRadius: '8px', border: '1.5px solid #ddd6fe', outline: 'none', fontSize: '13px', background: '#fff', boxSizing: 'border-box' }}
+          />
+          <button
+            onClick={handleSearch}
+            style={{ padding: '9px 18px', borderRadius: '8px', border: 'none', background: '#7c3aed', color: '#fff', fontSize: '13px', fontWeight: 700, cursor: 'pointer' }}
+          >
+            Search
+          </button>
+          {(inputEmp || inputProj || inputWeek || inputYear) && (
+            <button
+              onClick={handleClearSearch}
+              style={{ padding: '9px 14px', borderRadius: '8px', border: '1.5px solid #e5e7eb', background: '#fff', color: '#6b7280', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}
+            >
+              Clear
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* ── Summary bar ── */}
+      {!loading && !error && (
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '20px' }}>
+          {[
+            { label: 'Employees',  value: employees.length,                                                  color: '#7c3aed', bg: '#f5f3ff' },
+            { label: 'Total Weeks',value: plans.length,                                                      color: '#1d4ed8', bg: '#eff6ff' },
+            { label: 'Submitted',  value: plans.filter((p) => p.logStatus === 'submitted').length,           color: '#16a34a', bg: '#f0fdf4' },
+            { label: 'Pending',    value: plans.filter((p) => p.logStatus !== 'submitted').length,           color: '#d97706', bg: '#fffbeb' },
+          ].map((s) => (
+            <div key={s.label} style={{ padding: '10px 18px', background: s.bg, borderRadius: '10px', textAlign: 'center', minWidth: '90px' }}>
+              <div style={{ fontSize: '11px', color: '#6b7280', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.4px' }}>{s.label}</div>
+              <div style={{ fontSize: '22px', fontWeight: 800, color: s.color }}>{s.value}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── Content ── */}
+      {loading ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          {[...Array(3)].map((_, i) => (
+            <div key={i} style={{ height: '130px', borderRadius: '12px', background: 'linear-gradient(90deg,#f3f4f6 25%,#e9eaeb 50%,#f3f4f6 75%)', backgroundSize: '200% 100%', animation: 'shimmer 1.3s infinite' }} />
+          ))}
+          <style>{`@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}`}</style>
+        </div>
+      ) : error ? (
+        <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', color: '#dc2626', padding: '14px 18px', borderRadius: '10px', fontSize: '14px' }}>{error}</div>
+      ) : employees.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '72px 40px', background: '#f9fafb', borderRadius: '14px', border: '1.5px dashed #e5e7eb' }}>
+          <BsPeopleFill size={48} color="#d1d5db" style={{ display: 'block', margin: '0 auto 16px' }} />
+          <p style={{ margin: '0 0 6px', fontSize: '17px', fontWeight: 700, color: '#374151' }}>No data found</p>
+          <p style={{ margin: 0, fontSize: '14px', color: '#9ca3af' }}>Try adjusting your filters or adding weekly plans.</p>
+        </div>
+      ) : (
+        employees.map((emp, idx) => (
+          <EmployeeSection
+            key={String(emp.employee?._id)}
+            employee={emp.employee}
+            projectGroups={emp.projects}
+            palette={EMP_PALETTES[idx % EMP_PALETTES.length]}
+            idx={idx}
+            managerEmpId={managerEmpId}
+            onEditSave={fetchPlans}
+            openPanelKey={openPanelKey}
+            onTogglePanel={handleTogglePanel}
+          />
+        ))
+      )}
+    </div>
+  );
+};
+
+export default WeeklyReviewSection;
