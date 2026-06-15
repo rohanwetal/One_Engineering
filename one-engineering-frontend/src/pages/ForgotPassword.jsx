@@ -101,7 +101,7 @@ const ForgotPassword = () => {
                   Your password has been changed successfully. You can now sign in with your new password.
                 </p>
                 <button
-                  onClick={() => navigate('/https://apps.acceleronsolutions.io/gepl_one_engineering/login')}
+                  onClick={() => navigate('https://apps.acceleronsolutions.io/gepl_one_engineering/login')}
                   className="auth-button"
                 >
                   Go to Sign In →
