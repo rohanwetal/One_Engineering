@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import SummaryApi from '../apis/index.jsx';
 import logo from '../assets/logo_gainwell_main.png';
 import { setAuthUser, getAuthUser, getDashboardPath } from '../utils/auth';
@@ -145,7 +145,9 @@ const Login = () => {
 
             <p style={{ textAlign: 'center', fontSize: '13px', color: '#9ca3af', marginTop: '20px' }}>
               Don't have an account?{' '}
-              <a href="/signup" className="auth-link" style={{ color: '#4a7fc1' }}>Create one</a>
+              <Link to="/signup" className="auth-link" style={{ color: '#4a7fc1' }}>
+                Create one
+              </Link>
             </p>
           </div>
 
