@@ -112,7 +112,7 @@ const Signup = () => {
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Signup failed');
       alert('Signup successful! Please login to continue.');
-      navigate('https://apps.acceleronsolutions.io/gepl_one_engineering/login');
+      window.location.href = 'https://apps.acceleronsolutions.io/gepl_one_engineering/login';
     } catch (error) {
       setErrors({ apiError: error.message });
     } finally {
