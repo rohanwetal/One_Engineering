@@ -267,7 +267,9 @@ const Signup = () => {
 
             <p style={{ textAlign: 'center', fontSize: '13px', color: '#9ca3af', marginTop: '18px' }}>
               Already have an account?{' '}
-              <a href="/login" className="auth-link" style={{ color: '#4a7fc1' }}>Sign in</a>
+              <Link to="/login" className="auth-link" style={{ color: '#4a7fc1' }}>
+                                Sign in
+                              </Link>
             </p>
           </div>
 
