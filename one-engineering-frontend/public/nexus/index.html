@@ -1,28 +1,4 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Nexus</title>
-  <script>
-    // Nexus has no login page. Check for valid session and route accordingly.
-    (function () {
-      try {
-        var raw = localStorage.getItem('nexus:session');
-        if (raw) {
-          var s = JSON.parse(raw);
-          if (s && s.token && s.expiry && Date.now() < s.expiry) {
-            var role = s.user && s.user.role;
-            if (role === 'Manager(COE)' || role === 'Admin') {
-              window.location.replace('home.html');
-              return;
-            }
-          }
-        }
-      } catch (e) {}
-      // No valid session — go to OE login
-      window.location.replace('http://localhost:5173/login');
-    })();
-  </script>
-</head>
-<body></body>
-</html>
+<html><head><meta charset="UTF-8">
+  <script>window.location.replace('home.html');</script>
+</head><body></body></html>
