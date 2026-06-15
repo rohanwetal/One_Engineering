@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import SummaryApi from '../apis';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { roleOptions, departmentOptions } from '../role_details';
 import logo from '../assets/logo_gainwell_main.png';
 import { project_name } from '../config/project';
@@ -112,7 +112,7 @@ const Signup = () => {
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Signup failed');
       alert('Signup successful! Please login to continue.');
-      window.location.href = 'https://apps.acceleronsolutions.io/gepl_one_engineering/login';
+     navigate('/login')
     } catch (error) {
       setErrors({ apiError: error.message });
     } finally {
